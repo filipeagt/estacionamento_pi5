@@ -2,8 +2,8 @@
 #include <PubSubClient.h>
 
 //WiFi
-const char* SSID = "";                // SSID / nome da rede WiFi que deseja se conectar
-const char* PASSWORD = "";   // Senha da rede WiFi que deseja se conectar
+const char* SSID = "filipe-HP-G42-Notebook-PC";                // SSID / nome da rede WiFi que deseja se conectar
+const char* PASSWORD = "SXaeaHER";   // Senha da rede WiFi que deseja se conectar
 WiFiClient wifiClient;                        
  
 //MQTT Server
@@ -119,19 +119,18 @@ void medeDistancia() {
 
 void enviaDado() { 
   medeDistancia();
-  if (distancia > 2000) { //A vaga está livre, acende a luz verde
+  if (distancia > 200) { //A vaga está livre, acende a luz verde
     digitalWrite(ledVermelho, LOW);
     digitalWrite(ledVerde, HIGH);
     MQTT.publish(TOPIC, "false");   //NÃO tem carro envia "false"
 
-  } else if (distancia < 1500 && distancia != 0) {  //Vaga ocupada, acende luz vermelha
+  } else if (distancia < 150 && distancia != 0) {  //Vaga ocupada, acende luz vermelha
     digitalWrite(ledVerde, LOW);
     digitalWrite(ledVermelho, HIGH);
     MQTT.publish(TOPIC, "true");    //Tem carro envia "true"
 
-  } else if (distancia == 0) {  //Sensor com falha, acende luz amarela
+  } else if (distancia == 0) {  //Sensor com falha, acende luz amarela e não envia dados
     digitalWrite(ledVermelho, HIGH);
     digitalWrite(ledVerde, HIGH);
-    MQTT.publish(TOPIC, "null");    //Falha, envia "null"
   }
 }
