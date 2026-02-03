@@ -11,7 +11,7 @@ const char* BROKER_MQTT = "test.mosquitto.org"; //URL do broker MQTT que se dese
 int BROKER_PORT = 1883;                      // Porta do Broker MQTT
 
 #define ID_MQTT  "LhczCQYoOBMMFQU5ABUbFTI" //Informe um ID unico e seu. Caso sejam usados IDs repetidos a ultima conexão irá sobrepor a anterior. 
-#define TOPIC "pi5/estacionamento/vaga/001"    //Cada sensor deve ter um número diferente para sua vaga
+#define TOPIC "pi5/estacionamento/vaga/A01"    //Cada sensor deve ter um número diferente para sua vaga
 //#define USUARIO_MQTT "LhczCQYoOBMMFQU5ABUbFTI" //Usúario do broker
 //#define SENHA_MQTT "XuVt0v7/G3VDLhD+JRSV3UhS" //Senha do broker
 PubSubClient MQTT(wifiClient);        // Instancia o Cliente MQTT passando o objeto espClient
