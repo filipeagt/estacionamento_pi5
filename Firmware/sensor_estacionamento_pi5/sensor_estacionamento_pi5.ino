@@ -62,18 +62,18 @@ void loop() {
 }
 
 void mantemConexoes() {
-    if (!MQTT.connected()) {
-       conectaMQTT(); 
-    }
+
+  if (WiFi.status() != WL_CONNECTED) {  //se não há conexão com o WiFI, a conexão é refeita
+    conectaWiFi(); 
+  }
+
+  if (!MQTT.connected()) {  //Se não estiver conectado ao broker, reconecta
+    conectaMQTT(); 
+  }    
     
-    conectaWiFi(); //se não há conexão com o WiFI, a conexão é refeita
 }
 
 void conectaWiFi() {
-
-  if (WiFi.status() == WL_CONNECTED) {
-     return;
-  }
 
   WiFi.mode(WIFI_STA); //Configura o esp como estação
   WiFi.begin(SSID, PASSWORD); // Conecta na rede WI-FI  
@@ -124,7 +124,7 @@ void enviaDado() {
     digitalWrite(ledVerde, HIGH);
     MQTT.publish(TOPIC, "false");   //NÃO tem carro envia "false"
 
-  } else if (distancia < 150 && distancia != 0) {  //Vaga ocupada, acende luz vermelha
+  } else if (distancia < 180 && distancia != 0) {  //Vaga ocupada, acende luz vermelha
     digitalWrite(ledVerde, LOW);
     digitalWrite(ledVermelho, HIGH);
     MQTT.publish(TOPIC, "true");    //Tem carro envia "true"
