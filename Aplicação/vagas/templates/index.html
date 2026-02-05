@@ -1,11 +1,17 @@
+{% load static %}
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Teste</title>
+    <link rel="shortcut icon" href="{% static 'nivel/img/favicon.ico' %}" type="image/x-icon">
+    <link rel="stylesheet" href="{% static 'nivel/css/style.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
     <h1>Teste</h1>
+
+    <script src="{% static 'nivel/js/script.js' %}"></script>
 </body>
 </html>
