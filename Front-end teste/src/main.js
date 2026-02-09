@@ -1,5 +1,7 @@
+/* mqtt and Chart are provided as global scripts (mqtt, Chart) loaded from HTML */
+
 const TOTAL = 40;
-const MQTT_BROKER = "ws://test.mosquitto.org:8080";
+const MQTT_BROKER = "wss://test.mosquitto.org:8081";
 const SUB_TOPIC = "pi5/estacionamento/vaga/#";
 const TOPIC_PREFIX = "pi5/estacionamento/vaga";
 const SLOT_PREFIX = "A";
@@ -7,28 +9,30 @@ const SLOT_PREFIX = "A";
 const cardsContainer = document.getElementById("cards");
 const selectedSlotEl = document.getElementById("selected-slot");
 const statusEl = document.getElementById("status");
-const distanceEl = document.getElementById("distance");
 const updatedEl = document.getElementById("updated");
 const topicEl = document.getElementById("topic");
 
 const chartCanvas = document.getElementById("historyChart");
+const mqttStatusEl = document.getElementById("mqtt-status");
+const mqttBrokerEl = document.getElementById("mqtt-broker");
+const mqttStateTextEl = document.getElementById("mqtt-state-text");
 
 let client = null;
-let slotData = {}; // {A01: {history: [{ts,dist}], last, updated, topic}}
+// slotData: { A01: { history: [{ts, occ}], last: boolean|null, updated, topic } }
+let slotData = {};
 let selected = "A01";
 let historyChart = null;
+
+// global aggregated history: [{ts, occupiedCount, freeCount, inactiveCount}]
+let globalHistory = [];
 
 function pad(n){return n.toString().padStart(2,"0")}
 function slotName(i){return `${SLOT_PREFIX}${pad(i)}`}
 
-/**
- * Extract slot name from topic like "pi5/estacionamento/vaga/A01" (takes last segment if matches).
- */
 function extractSlotFromTopic(topic){
   const parts = topic.split("/").filter(Boolean);
   const last = parts[parts.length - 1];
   if(last && new RegExp(`^${SLOT_PREFIX}\\d{2}$`, "i").test(last)) return last.toUpperCase();
-  // fallback: find any segment matching pattern
   for(const p of parts){
     if(p && new RegExp(`^${SLOT_PREFIX}\\d{2}$`, "i").test(p)) return p.toUpperCase();
   }
@@ -45,7 +49,6 @@ function createCards(){
     card.innerHTML = `
       <div class="slot">${name}</div>
       <div class="meta">
-        <span class="distance">— cm</span>
         <span class="meta-right">
           <span class="status-text">Inativo</span>
           <span class="status-dot"></span>
@@ -61,15 +64,12 @@ function updateCard(slot){
   const card = cardsContainer.querySelector(`.card[data-slot="${slot}"]`);
   if(!card) return;
   const data = slotData[slot];
-  const distText = (data.last === null) ? "—" : `${data.last.toFixed(1)} cm`;
-  card.querySelector(".distance").textContent = distText;
 
-  // determine status: occupied if last < 30, free if last >= 30, inactive if no update for a while
-  const INACTIVE_MS = 20_000; // 20 seconds inactivity threshold
+  const INACTIVE_MS = 20_000;
   const now = Date.now();
   const isStale = !data.updated || (now - data.updated) > INACTIVE_MS;
-  const isOccupied = (data.last !== null && data.last < 30);
-  const isFree = (data.last !== null && data.last >= 30);
+  const isOccupied = (data.last === true);
+  const isFree = (data.last === false);
 
   card.classList.remove("occupied","free","inactive");
   if(isStale || data.last === null){
@@ -90,11 +90,10 @@ function updateCard(slot){
 function selectSlot(slot, focus=false){
   selected = slot;
   selectedSlotEl.textContent = slot;
-  // mark selected
   cardsContainer.querySelectorAll(".card").forEach(c=>c.classList.remove("selected"));
   const card = cardsContainer.querySelector(`.card[data-slot="${slot}"]`);
   if(card) card.classList.add("selected");
-  // update detail
+
   const data = slotData[slot];
   const INACTIVE_MS = 20_000;
   const now = Date.now();
@@ -102,12 +101,10 @@ function selectSlot(slot, focus=false){
   if(isStale || data.last === null){
     statusEl.textContent = "Inativo";
   }else{
-    statusEl.textContent = (data.last < 30) ? "Ocupada" : "Livre";
+    statusEl.textContent = data.last ? "Ocupada" : "Livre";
   }
-  distanceEl.textContent = (data.last === null) ? "—" : data.last.toFixed(1);
   updatedEl.textContent = data.updated ? new Date(data.updated).toLocaleString() : "—";
   topicEl.textContent = data.topic;
-  // update chart (occupancy history)
   updateChart(slot);
   if(focus) card?.focus();
 }
@@ -125,7 +122,8 @@ function initChart(){
           borderColor: "#ff6b6b",
           backgroundColor: "rgba(255,107,107,0.12)",
           tension: 0.2,
-          pointRadius: 3,
+          pointRadius: 0,
+          pointHoverRadius: 0,
           borderWidth: 2,
           fill: true,
         },
@@ -135,7 +133,8 @@ function initChart(){
           borderColor: "#4cd964",
           backgroundColor: "rgba(76,217,100,0.12)",
           tension: 0.2,
-          pointRadius: 3,
+          pointRadius: 0,
+          pointHoverRadius: 0,
           borderWidth: 2,
           fill: true,
         }
@@ -149,83 +148,120 @@ function initChart(){
         y: {
           beginAtZero: true,
           min: 0,
-          max: 1,
+          // set max to TOTAL so chart shows true counts (sum across all slots)
+          max: TOTAL,
           ticks: {
-            stepSize: 1,
-            callback: v => v ? 'Ocupada' : 'Livre'
+            stepSize: Math.max(1, Math.ceil(TOTAL / 10)),
+            // show numeric tick labels
+            callback: v => String(v)
           }
         }
       },
       plugins: {
-        legend: { display: true, position: 'top' }
+        legend: { 
+          display: true, 
+          position: 'top',
+          // ensure clicking legend toggles datasets
+          onClick: (e, legendItem, legend) => {
+            const index = legendItem.datasetIndex;
+            const chart = legend.chart;
+            // use built-in toggle when available, fallback to manual hide/show
+            if (typeof chart.toggleDataVisibility === "function") {
+              chart.toggleDataVisibility(index);
+            } else {
+              const meta = chart.getDatasetMeta(index);
+              meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+            }
+            chart.update();
+          }
+        },
+        title: {
+          display: true,
+          text: `Histórico (soma de todas as vagas: ${TOTAL})`,
+          font: { size: 14 },
+        }
       },
       elements: {
-        line: { cubicInterpolationMode: 'monotone' }
+        line: { cubicInterpolationMode: 'monotone' },
+        // remove points globally as extra safeguard
+        point: { radius: 0, hoverRadius: 0 }
       }
     }
   });
 }
 
-function updateChart(slot){
-  const data = slotData[slot];
-  // Prepare labels and occupancy arrays
-  const labels = data.history.map(h => new Date(h.ts).toLocaleTimeString());
-  // Occupied series: 1 when occupied, else 0
-  const occupied = data.history.map(h => (h.dist < 30 ? 1 : 0));
-  // Free series: 1 when free, else 0 (inverse of occupied)
-  const free = data.history.map(h => (h.dist >= 30 ? 1 : 0));
+function updateChart(){
+  // Use globalHistory to render aggregated counts
+  const labels = globalHistory.map(h => new Date(h.ts).toLocaleTimeString());
+  const occupied = globalHistory.map(h => h.occupiedCount);
+  const free = globalHistory.map(h => h.freeCount);
+  const inactive = globalHistory.map(h => h.inactiveCount);
+
   historyChart.data.labels = labels;
-  // Ensure datasets exist
-  if(historyChart.data.datasets.length < 2){
-    historyChart.data.datasets = historyChart.data.datasets.slice(0,2);
-  }
+  // ensure three datasets (Ocupadas, Livres, Inativas)
+  historyChart.data.datasets = historyChart.data.datasets.slice(0,3);
   historyChart.data.datasets[0].data = occupied;
   historyChart.data.datasets[1].data = free;
+  // if third dataset doesn't exist, create/replace it with yellow line
+  if(historyChart.data.datasets.length < 3){
+    historyChart.data.datasets[2] = {
+      label: "Inativas",
+      data: inactive,
+      borderColor: "#ffcf4d",
+      backgroundColor: "rgba(255,207,77,0.12)",
+      tension: 0.2,
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      borderWidth: 2,
+      fill: true,
+    };
+  } else {
+    historyChart.data.datasets[2].data = inactive;
+  }
   historyChart.update();
 }
 
-/* --- New: fetch JSON history from localhost endpoints like /vagaA01.json --- */
+/* Fetch history endpoints and map to boolean occupancy */
 async function fetchSlotHistoryHttp(slot){
-  // endpoint pattern: http://localhost:8000/vagaA01.json
   const url = `${location.protocol}//${location.hostname}:8000/vaga${slot}.json`;
   try{
     const resp = await fetch(url, {cache: "no-store"});
     if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
-    // expected shape: {"dados":[{"data_hora":"2026-02-04T14:49:55.488503+00:00","ocupada":"False"}, ...]}
     if(!json || !Array.isArray(json.dados)) return;
     const entries = json.dados.map(item => {
       const ts = Date.parse(item.data_hora) || Date.now();
-      // map ocupada string to a distance proxy: occupied -> 10cm, free -> 120cm
       const occ = String(item.ocupada).toLowerCase() === "true";
-      const dist = occ ? 10 : 120;
-      return {ts, dist};
+      return {ts, occ};
     });
-    // merge into slot history (keep chronological, limit 100)
     const existing = slotData[slot].history || [];
-    // Simple replace: use fetched entries (assume they're historical), then keep last existing dynamic updates too
     slotData[slot].history = [...existing, ...entries].sort((a,b)=>a.ts-b.ts).slice(-100);
-    // update last/updated from newest entry if present
     const last = slotData[slot].history[slotData[slot].history.length-1];
     if(last){
-      slotData[slot].last = last.dist;
+      slotData[slot].last = last.occ;
       slotData[slot].updated = last.ts;
     }
     updateCard(slot);
     if(slot === selected) selectSlot(slot);
   }catch(e){
-    // network error - do nothing, keep demo or mqtt data
+    // ignore fetch errors
   }
 }
 
-function fetchAllHistories(){
+async function fetchAllHistories(){
+  // fetch each slot history once at startup
+  const promises = [];
   for(let i=1;i<=TOTAL;i++){
     const s = slotName(i);
-    fetchSlotHistoryHttp(s);
+    promises.push(fetchSlotHistoryHttp(s));
   }
+  try{
+    await Promise.all(promises);
+  }catch(e){}
+  // after loading slot histories, build aggregated global history and render chart
+  rebuildGlobalHistory();
+  updateChart();
 }
-
-/* --- end new --- */
 
 function connect(brokerUrl){
   if(client){
@@ -242,52 +278,78 @@ function connect(brokerUrl){
 
   client.on("connect", () => {
     console.info("MQTT conectado");
-    // subscribe to all parking slots distances
+    if(mqttBrokerEl) mqttBrokerEl.textContent = brokerUrl.replace(/^ws:\/\//i,'');
+    if(mqttStatusEl){
+      mqttStatusEl.classList.remove("inactive","connecting");
+      mqttStatusEl.classList.add("active");
+    }
+    if(mqttStateTextEl) mqttStateTextEl.textContent = "Conectado";
     client.subscribe(SUB_TOPIC, {qos:0}, (err) => {
       if(err) console.warn("subscribe error", err);
     });
   });
 
-  client.on("reconnect", ()=>console.info("reconnecting..."));
-  client.on("error", err => console.error("MQTT error", err));
+  client.on("reconnect", ()=>{
+    console.info("reconnecting...");
+    if(mqttStatusEl){
+      mqttStatusEl.classList.remove("active","inactive");
+      mqttStatusEl.classList.add("connecting");
+    }
+    if(mqttStateTextEl) mqttStateTextEl.textContent = "Reconectando";
+  });
+  client.on("error", err => {
+    console.error("MQTT error", err);
+    if(mqttStatusEl){
+      mqttStatusEl.classList.remove("active","connecting");
+      mqttStatusEl.classList.add("inactive");
+    }
+    if(mqttStateTextEl) mqttStateTextEl.textContent = "Erro";
+  });
+  client.on("close", () => {
+    if(mqttStatusEl){
+      mqttStatusEl.classList.remove("active","connecting");
+      mqttStatusEl.classList.add("inactive");
+    }
+    if(mqttStateTextEl) mqttStateTextEl.textContent = "Desconectado";
+  });
   client.on("message", (topic, payload) => {
     try{
       const msg = payload.toString().trim();
-      let dist = null;
+      let occ = null;
 
-      // Sensor sends plain "true" or "false" indicating occupied / free
       const lw = msg.toLowerCase();
       if(lw === "true" || lw === "false"){
-        const occupied = lw === "true";
-        dist = occupied ? 10 : 120; // distance proxy
+        occ = lw === "true";
       } else if(/^[\d.]+$/.test(msg)){
-        // fallback numeric payload (legacy)
-        dist = parseFloat(msg);
+        // legacy numeric: treat <30 as occupied
+        const dist = parseFloat(msg);
+        occ = dist < 30;
       }else{
-        // try JSON payload with distance field
         try{
           const parsed = JSON.parse(msg);
           if(typeof parsed === "object" && parsed !== null){
-            if(parsed.distance !== undefined) dist = Number(parsed.distance);
-            else if(parsed.dist !== undefined) dist = Number(parsed.dist);
+            if(parsed.ocupada !== undefined) occ = String(parsed.ocupada).toLowerCase() === "true";
+            else if(parsed.distance !== undefined) occ = Number(parsed.distance) < 30;
+            else if(parsed.dist !== undefined) occ = Number(parsed.dist) < 30;
           }
         }catch(e){}
       }
 
-      // parse topic to extract slot name
       const slot = extractSlotFromTopic(topic);
       if(slot && slotData[slot]){
-          const ts = Date.now();
-          slotData[slot].last = (dist===null)?slotData[slot].last:dist;
-          slotData[slot].updated = ts;
-          // push history (keep last 100)
-          if(dist !== null){
-            slotData[slot].history.push({ts, dist});
-            if(slotData[slot].history.length > 100) slotData[slot].history.shift();
-          }
-          updateCard(slot);
-          if(slot === selected) selectSlot(slot);
-        
+        const ts = Date.now();
+        if(occ !== null){
+          slotData[slot].last = occ;
+          slotData[slot].history.push({ts, occ});
+          if(slotData[slot].history.length > 100) slotData[slot].history.shift();
+        }
+        slotData[slot].updated = ts;
+        updateCard(slot);
+        if(slot === selected) selectSlot(slot);
+
+        // Update aggregated global history with the current totals
+        rebuildGlobalHistory();
+        updateChart();
       }
     }catch(e){
       console.error("msg parse error", e);
@@ -295,21 +357,54 @@ function connect(brokerUrl){
   });
 }
 
-// initial setup
+ // helper to rebuild global aggregated timeline
+function rebuildGlobalHistory(){
+  // collect timestamps from all slot histories
+  const stamps = new Set();
+  for(const k in slotData){
+    const h = slotData[k].history || [];
+    for(const e of h) stamps.add(e.ts);
+  }
+  // include last-updated times so inactivity can be represented
+  for(const k in slotData){
+    if(slotData[k].updated) stamps.add(slotData[k].updated);
+  }
+  const times = Array.from(stamps).sort((a,b)=>a-b).slice(-100);
+
+  const INACTIVE_MS = 20_000;
+  globalHistory = times.map(ts => {
+    let occ = 0, free = 0, inactive = 0;
+    for(const k in slotData){
+      const s = slotData[k];
+      // find last known state at or before ts
+      const hist = (s.history || []).filter(h => h.ts <= ts);
+      const last = hist.length ? hist[hist.length-1] : null;
+      if(!last){
+        inactive++;
+      }else{
+        const isStale = !s.updated || (ts - s.updated) > INACTIVE_MS;
+        if(isStale) inactive++;
+        else if(last.occ) occ++;
+        else free++;
+      }
+    }
+    return {ts, occupiedCount: occ, freeCount: free, inactiveCount: inactive};
+  });
+}
+
+ // initial setup
 createCards();
 initChart();
 selectSlot(selected);
 
-/* attempts to connect on load using broker defined in code */
-connect(MQTT_BROKER);
+document.getElementById("year").textContent = new Date().getFullYear();
 
-// fetch HTTP histories once on load
+if(mqttBrokerEl) mqttBrokerEl.textContent = MQTT_BROKER.replace(/^ws:\/\//i,'');
+
+connect(MQTT_BROKER);
+// load histories once at startup and build aggregated chart
 fetchAllHistories();
 
-// periodically refresh HTTP histories (every 30s)
-setInterval(fetchAllHistories, 30_000);
-
-// keyboard navigation (accessibility): arrow keys change selection
 document.addEventListener("keydown", (e)=>{
   const cols = getComputedStyle(cardsContainer).gridTemplateColumns.split(" ").length || 5;
   const idx = Number(selected.slice(1)) - 1;
@@ -324,23 +419,18 @@ document.addEventListener("keydown", (e)=>{
   }
 });
 
-// For demo: generate fake sensor data when running without broker
-let demoTimer = setInterval(()=>{
-  // only simulate if broker seems disconnected
-  if(!client || client.disconnected){
-    // randomly pick a slot and assign a distance between 10 and 150
-    const i = Math.floor(Math.random()*TOTAL)+1;
-    const slot = slotName(i);
-    const dist = Math.random()*140 + 10;
-    const ts = Date.now();
-    slotData[slot].last = dist;
-    slotData[slot].updated = ts;
-    slotData[slot].history.push({ts, dist});
-    if(slotData[slot].history.length > 100) slotData[slot].history.shift();
-    updateCard(slot);
-    if(slot === selected) selectSlot(slot);
-  }
-}, 2500);
 
-// helper to expose slotName in module scope
+
 window.__parking_utils__ = {slotName, fetchSlotHistoryHttp};
+
+// Periodic refresh to mark cards as inactive when no data for >20s and keep chart in sync
+const INACTIVE_CHECK_INTERVAL_MS = 2000;
+setInterval(() => {
+  // update each card's visual state based on latest timestamps
+  for(const name in slotData){
+    updateCard(name);
+  }
+  // rebuild aggregated history and refresh chart so inactivity counts update over time
+  rebuildGlobalHistory();
+  if(historyChart) updateChart();
+}, INACTIVE_CHECK_INTERVAL_MS);

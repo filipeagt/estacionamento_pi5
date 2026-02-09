@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -8,11 +7,25 @@
 
   <link rel="stylesheet" href="styles.css" />
 
+  <!-- Libraries loaded as globals for non-module environment -->
   <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body>
+  <header id="site-header" aria-hidden="false">
+    <div class="header-left">
+      <div class="logo">Estacionamento</div>
+      <div class="sub">Painel de Vagas</div>
+    </div>
+    <div class="header-right">
+      <div id="mqtt-status" class="mqtt-card inactive" role="status" aria-live="polite">
+        <div class="mqtt-title">MQTT</div>
+        <div class="mqtt-broker">broker: <span id="mqtt-broker">—</span></div>
+        <div class="mqtt-state">Status: <span id="mqtt-state-text">Desconectado</span></div>
+      </div>
+    </div>
+  </header>
+
   <main id="app">
     <section id="grid-wrap" aria-label="Vagas">
       <div id="cards" class="cards"></div>
@@ -20,24 +33,26 @@
 
     <section id="detail" aria-live="polite">
       <div class="detail-header">
-        <div id="selected-slot">A01</div>
+        <div id="selected-slot">Histórico de vagas</div>
         <div class="controls" aria-hidden="true"></div>
       </div>
 
       <div class="detail-body">
         <div class="stats">
           <div><strong>Status:</strong> <span id="status">—</span></div>
-          <div><strong>Distância:</strong> <span id="distance">—</span> cm</div>
           <div><strong>Última atualização:</strong> <span id="updated">—</span></div>
           <div><strong>Tópico:</strong> <span id="topic">—</span></div>
         </div>
 
-        <canvas id="historyChart" width="400" height="200" aria-label="Histórico de distância"></canvas>
+        <canvas id="historyChart" width="400" height="200" aria-label="Histórico de ocupação"></canvas>
       </div>
     </section>
   </main>
 
+  <footer id="site-footer" aria-hidden="false">
+    <div>© <span id="year"></span> Monitoramento de Vagas</div>
+  </footer>
+
   <script src="src/main.js"></script>
 </body>
-
 </html>

@@ -15,8 +15,9 @@
 }
 
 *{box-sizing:border-box}
-html,body,#app{height:100%;margin:0;background:linear-gradient(180deg, #071018 0%, var(--bg) 100%);color:#e6eef6}
-#app{display:flex;flex-direction:column;gap:14px;padding:16px}
+html,body{height:100%;margin:0;background:linear-gradient(180deg, #071018 0%, var(--bg) 100%);color:#e6eef6}
+body{display:flex;flex-direction:column;min-height:100vh}
+#app{flex:1;display:flex;flex-direction:column;gap:14px;padding:16px}
 
 /* Cards area */
 .cards{
@@ -102,4 +103,65 @@ canvas{flex:1;min-width:220px;max-width:100%;height:220px;background:transparent
   #app{padding:20px}
   .cards{grid-template-columns:repeat(8,1fr);gap:12px}
   canvas{height:260px}
+}
+
+/* Header & Footer */
+#site-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  padding:12px 16px;
+  border-radius:12px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border:1px solid rgba(255,255,255,0.03);
+}
+.header-left{display:flex;flex-direction:column}
+.logo{font-weight:800;font-size:16px;color:#eaf6ff}
+.sub{font-size:12px;color:var(--muted)}
+
+.header-right{display:flex;align-items:center;gap:12px}
+
+/* MQTT card in header */
+.mqtt-card{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding:8px 10px;
+  border-radius:10px;
+  min-width:160px;
+  text-align:right;
+  background:rgba(255,255,255,0.02);
+  border:1px solid rgba(255,255,255,0.02);
+  font-size:12px;
+}
+.mqtt-card .mqtt-title{font-weight:800;color:#eaf6ff;font-size:13px}
+.mqtt-card .mqtt-broker{color:var(--muted);font-size:12px}
+.mqtt-card .mqtt-state{font-weight:700}
+/* MQTT card color scheme aligned with slot card statuses:
+   active -> free (green), connecting -> accent purple, inactive -> yellow */
+.mqtt-card.active{
+  box-shadow:0 8px 20px rgba(76,217,100,0.08);
+  border-color:rgba(76,217,100,0.06);
+  background:linear-gradient(180deg, rgba(76,217,100,0.03), rgba(76,217,100,0.01));
+}
+.mqtt-card.connecting{
+  box-shadow:0 8px 20px rgba(124,92,255,0.06);
+  border-color:rgba(124,92,255,0.06);
+  background:linear-gradient(180deg, rgba(124,92,255,0.03), rgba(124,92,255,0.01));
+}
+.mqtt-card.inactive{
+  box-shadow:0 8px 20px rgba(255,207,77,0.06);
+  border-color:rgba(255,207,77,0.04);
+  background:linear-gradient(180deg, rgba(255,207,77,0.03), rgba(255,207,77,0.01));
+}
+
+/* Footer */
+#site-footer{
+  padding:10px 16px;
+  border-radius:10px;
+  background:transparent;
+  color:var(--muted);
+  font-size:12px;
+  text-align:center;
 }
