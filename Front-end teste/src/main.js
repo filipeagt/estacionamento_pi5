@@ -270,7 +270,7 @@ function connect(brokerUrl){
   }
 
   try{
-    client = mqtt.connect(brokerUrl, {connectTimeout: 4000});
+    client = mqtt.connect(brokerUrl, {connectTimeout: 10000});
   }catch(e){
     console.error("MQTT connect error", e);
     return;
