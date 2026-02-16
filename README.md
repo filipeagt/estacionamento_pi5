@@ -2,12 +2,13 @@
 
 Este site foi desenvolvido para a disciplina de projeto integrador V de Engenharia de Computação da Univesp.
 
-## Configurando o ambiente Linux
+## Configurando o ambiente Linux (Mint)
 
 Execute os comando abaixo no terminal:
 
 `sudo apt install python3-pip`
-`sudo pip3 install virtualenvwrapper`
+
+`sudo apt install virtualenvwrapper`
  
 Adicionar as linhas abaixo no arquivo .bashrc no diretório home
     
@@ -15,7 +16,11 @@ Adicionar as linhas abaixo no arquivo .bashrc no diretório home
     export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
     export VIRTUALENVWRAPPER_VIRTUALENV_ARGS=' -p /usr/bin/python3 '
     export PROJECT_HOME=$HOME/Devel
-    source /usr/local/bin/virtualenvwrapper.sh
+    source /usr/share/virtualenvwrapper/virtualenvwrapper.sh
+    
+Outras distros podem ter caminho diferente para source, por exemplo caminho no Ubuntu:
+
+/usr/local/bin/virtualenvwrapper.sh
     
 Execute:
 
@@ -43,6 +48,11 @@ Abra a pasta do projeto no terminal e execute:
     python3 manage.py runserver
 
 Abra o link <http://127.0.0.1:8000> no navegador.
+
+Nas próximas vezes basta ativar o ambiente virtual configurado e rodar o projeto.
+
+    workon nome_ambiente
+    python3 manage.py runserver
 
 ## Usando o ambiente virtual
 
