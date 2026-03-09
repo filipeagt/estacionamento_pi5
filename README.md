@@ -1,6 +1,6 @@
 # estacionamento_pi5
 
-Este site foi desenvolvido para a disciplina de projeto integrador V de Engenharia de Computação da Univesp.
+Esta aplicação web foi desenvolvida para a disciplina de projeto integrador V de Engenharia de Computação da Univesp.
 
 ## Configurando o ambiente Linux (Mint)
 
